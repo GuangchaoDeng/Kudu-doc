@@ -1,0 +1,66 @@
+1、Authentication
+Kudu安全认证采用Kerberos机制实现，可以设置servers之间以及client和servers之间的认证。
+配置选选项：
+flag:    --rpc-authentication 
+value： 
+required : clients和servers对kudu的访问需要证书，否则拒绝访问
+optional: 默认值，采取强认证，但允许unauthenticated的连接
+disabled: 允许未认证的连接
+
+2、Internal PKI
+Kudu使用内部的PKI产生X.509证书。
+在获取证书的双方之间的连接使用TSL加密，并进行认证，该认证不需要通过KDC。
+这些证书仅限于Kudu server之间或Kudu client和server之间的内部通信
+通过内部PKI产生的证书，Kudu在大集群中提供强认证，允许TSL加密并且不需在集群中每个节点部署证书
+
+3、Authentication Tokens
+完成设置之后，Kudu Client会自动的向Kudu Master获取token，一个token包含认证user的ID以及master的RSA签名
+一个tokens的有效期为7天，对用户是完全透明的
+对于计算框架比如Spark，也支持安全认证
+
+4、Scalability(可扩展性)
+
+Kudu 认证是支持上千节点的，避免了跟中心认证机构（比如KDC）的不必要的协调。
+Kudu利用Kerberos来建立Kudu Server 、client 与master最初的信任，然后在后续的连接中利用替代的证书，该证书是由master产生的。
+
+5、Encryption
+
+Kudu在server之间以及server、client之间的连接通讯使用TSL加密
+设置参数： kudu server中设置 --rpc-encryption 
+         值 ：required ：必须加密连接
+                 optional（默认）：可以加密连接，也可以非加密连接
+           disabled ：非加密连接
+Kudu在本地回路连接中自动关闭加密
+
+6、Coarse-Grained Authorization（粗粒度的授权）
+   
+Kudu支持对客户端请求操作在基于已授权客户端Kerberos角色（比如user或service）进行粗粒度的授权。
+有两种可被配置的级别：
+(1)superuser ： 该类级别可以执行某些管理功能，比如使用kudu命令行工具来诊断或修复集群问题。
+(2)user ： 该类级别可以访问或修改所有Kudu集群上的数据，包括创建、删除修改表以及表数据的增删改查。
+在内部，Kudu还有针对守护进程自身的第三类级别，这确保users不会随意连接到集群以及冒充Tablet server
+
+Kudu通过基于白名单的ACLs(Access control Lists)来设置访问级别，ACLs中四用逗号隔开的users列表或*（表示所有认证用户）。默认的为*
+
+7、Web UI Encryption 、Redaction 、Log Security
+Web UI: 在Kudu servers可以通过 --webserver-enabled = false 设置可访问性
+log 可以通过配置 --redact 选项来设置是否可见
+
+
+示例：
+配置需要在所有master和tablet server中设置：
+[图片]
+
+
+8、Known Limitations（局限）
+
+(1)Long-lived Tokens 
+每个Kudu Client不能在初始化完token后自动更新token,所以长时间的连接客户端的安全性是不能保证的
+(2)Custom Kerberos Principal
+Kudu不支持为Kudu进程自定义的service principal，service principal必须是'kudu'
+(3)External PKI
+不支持外部PKI
+(4)不支持细粒度的授权（表、列级别）
+(5)不支持内嵌的硬盘数据加密，但可以通过全磁盘加密工具，例如dm-crypt
+(6)Web UI缺乏基于Kerberos的认证
+(7)认证和加密方面不支持Flume
